@@ -237,6 +237,7 @@ class GQLQuery(JsonQuery):
     def __init__(self, path, headers={}, data={}, use_token=True, method=methods.POST):
         _headers = deepcopy(headers)
         _headers.setdefault('Client-ID', CLIENT_ID)
+        _headers.setdefault('Content-Type', 'application/json')
         if use_token and OAUTH_TOKEN:
             _headers.setdefault('Authorization', 'OAuth {access_token}'.format(access_token=OAUTH_TOKEN))
         super(GQLQuery, self).__init__(_gql_baseurl, _headers, data, method)
