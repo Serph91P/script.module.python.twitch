@@ -98,8 +98,10 @@ def download(baseurl, parameters={}, headers={}, data={}, method=methods.GET, re
             if isinstance(data, list):
                 json_body = data
                 data = None
+                log.debug('Using json parameter with list data, length: {0}'.format(len(json_body) if json_body else 0))
             else:
                 json_body = None
+                log.debug('Using data parameter, type: {0}, length: {1}'.format(type(data).__name__, len(data) if data else 0))
             response = requests.request(method=method, url=url, headers=headers,
                                         json=json_body, data=data, verify=SSL_VERIFICATION)
             content = response.content
