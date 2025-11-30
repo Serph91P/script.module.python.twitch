@@ -50,14 +50,20 @@ def valid_video_id(video_id):
 @query
 def channel_token(channel, platform=keys.WEB, headers={}):
     data = [{
-        "operationName": "PlaybackAccessToken_Template",
-        "query": "query PlaybackAccessToken_Template($login: String!, $isLive: Boolean!, $vodID: ID!, $isVod: Boolean!, $playerType: String!) {  streamPlaybackAccessToken(channelName: $login, params: {platform: \"web\", playerBackend: \"mediaplayer\", playerType: $playerType}) @include(if: $isLive) {    value    signature    __typename  }  videoPlaybackAccessToken(id: $vodID, params: {platform: \"web\", playerBackend: \"mediaplayer\", playerType: $playerType}) @include(if: $isVod) {    value    signature    __typename  }}",
+        "operationName": "PlaybackAccessToken",
+        "extensions": {
+            "persistedQuery": {
+                "version": 1,
+                "sha256Hash": "ed230aa1e33e07eebb8928504583da78a5173989fadfb1ac94be06a04f3cdbe9"
+            }
+        },
         "variables": {
             "isLive": True,
             "login": channel,
             "isVod": False,
             "vodID": "",
-            "playerType": "site"
+            "playerType": "embed",
+            "platform": platform
         }
     }]
     q = GQLQuery('', headers=headers, data=data, use_token=True)
@@ -67,14 +73,20 @@ def channel_token(channel, platform=keys.WEB, headers={}):
 @query
 def vod_token(video_id, platform=keys.WEB, headers={}):
     data = [{
-        "operationName": "PlaybackAccessToken_Template",
-        "query": "query PlaybackAccessToken_Template($login: String!, $isLive: Boolean!, $vodID: ID!, $isVod: Boolean!, $playerType: String!) {  streamPlaybackAccessToken(channelName: $login, params: {platform: \"web\", playerBackend: \"mediaplayer\", playerType: $playerType}) @include(if: $isLive) {    value    signature    __typename  }  videoPlaybackAccessToken(id: $vodID, params: {platform: \"web\", playerBackend: \"mediaplayer\", playerType: $playerType}) @include(if: $isVod) {    value    signature    __typename  }}",
+        "operationName": "PlaybackAccessToken",
+        "extensions": {
+            "persistedQuery": {
+                "version": 1,
+                "sha256Hash": "ed230aa1e33e07eebb8928504583da78a5173989fadfb1ac94be06a04f3cdbe9"
+            }
+        },
         "variables": {
             "isLive": False,
             "login": "",
             "isVod": True,
             "vodID": video_id,
-            "playerType": "site"
+            "playerType": "embed",
+            "platform": platform
         }
     }]
     q = GQLQuery('', headers=headers, data=data, use_token=True)
@@ -88,7 +100,7 @@ def _legacy_video(video_id):
     return q
 
 
-def live_request(channel, platform=keys.WEB, headers={}):
+def live_request(channel, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264'):
     token = channel_token(channel, platform=platform, headers=headers)
     token = get_access_token(token)
 
@@ -112,6 +124,7 @@ def live_request(channel, platform=keys.WEB, headers={}):
         q.add_param(keys.PLAYLIST_INCLUDE_FRAMERATE, Boolean.TRUE)
         q.add_param(keys.RTQOS, keys.CONTROL)
         q.add_param(keys.PLAYER_BACKEND, keys.MEDIAPLAYER)
+        q.add_param(keys.SUPPORTED_CODECS, supported_codecs)
         url = '?'.join([q.url, urlencode(q.params)])
         request_dict = {
             'url': url,
@@ -122,7 +135,7 @@ def live_request(channel, platform=keys.WEB, headers={}):
 
 
 @query
-def _live(channel, token, headers={}):
+def _live(channel, token, headers={}, supported_codecs='av1,h265,h264'):
     signature = token[keys.SIGNATURE]
     access_token = token[keys.VALUE]
 
@@ -139,11 +152,12 @@ def _live(channel, token, headers={}):
     q.add_param(keys.PLAYLIST_INCLUDE_FRAMERATE, Boolean.TRUE)
     q.add_param(keys.RTQOS, keys.CONTROL)
     q.add_param(keys.PLAYER_BACKEND, keys.MEDIAPLAYER)
+    q.add_param(keys.SUPPORTED_CODECS, supported_codecs)
     return q
 
 
 @m3u8
-def live(channel, platform=keys.WEB, headers={}):
+def live(channel, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264'):
     token = channel_token(channel, platform=platform, headers=headers)
     token = get_access_token(token)
     if not token:
@@ -151,10 +165,10 @@ def live(channel, platform=keys.WEB, headers={}):
     elif isinstance(token, dict) and 'error' in token:
         return token
     else:
-        return _live(channel, token, headers=headers)
+        return _live(channel, token, headers=headers, supported_codecs=supported_codecs)
 
 
-def video_request(video_id, platform=keys.WEB, headers={}):
+def video_request(video_id, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264'):
     video_id = valid_video_id(video_id)
     if video_id:
         token = vod_token(video_id, platform=platform, headers=headers)
@@ -181,6 +195,7 @@ def video_request(video_id, platform=keys.WEB, headers={}):
             q.add_param(keys.BAKING_BREAD, Boolean.TRUE)
             q.add_param(keys.BAKING_BROWNIES, Boolean.TRUE)
             q.add_param(keys.BAKING_BROWNIES_TIMEOUT, 1050)
+            q.add_param(keys.SUPPORTED_CODECS, supported_codecs)
             url = '?'.join([q.url, urlencode(q.params)])
             request_dict = {
                 'url': url,
@@ -193,7 +208,7 @@ def video_request(video_id, platform=keys.WEB, headers={}):
 
 
 @query
-def _vod(video_id, token, headers={}):
+def _vod(video_id, token, headers={}, supported_codecs='av1,h265,h264'):
     signature = token[keys.SIGNATURE]
     access_token = token[keys.VALUE]
 
@@ -211,11 +226,12 @@ def _vod(video_id, token, headers={}):
     q.add_param(keys.BAKING_BREAD, Boolean.TRUE)
     q.add_param(keys.BAKING_BROWNIES, Boolean.TRUE)
     q.add_param(keys.BAKING_BROWNIES_TIMEOUT, 1050)
+    q.add_param(keys.SUPPORTED_CODECS, supported_codecs)
     return q
 
 
 @m3u8
-def video(video_id, platform=keys.WEB, headers={}):
+def video(video_id, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264'):
     video_id = valid_video_id(video_id)
     if video_id:
         token = vod_token(video_id, platform=platform, headers=headers)
@@ -226,7 +242,7 @@ def video(video_id, platform=keys.WEB, headers={}):
         elif isinstance(token, dict) and 'error' in token:
             return token
         else:
-            return _vod(video_id, token, headers=headers)
+            return _vod(video_id, token, headers=headers, supported_codecs=supported_codecs)
     else:
         raise NotImplementedError('Unknown Video Type')
 
