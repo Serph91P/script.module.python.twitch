@@ -100,7 +100,7 @@ def _legacy_video(video_id):
     return q
 
 
-def live_request(channel, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264'):
+def live_request(channel, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264', low_latency=False):
     token = channel_token(channel, platform=platform, headers=headers)
     token = get_access_token(token)
 
@@ -125,6 +125,8 @@ def live_request(channel, platform=keys.WEB, headers={}, supported_codecs='av1,h
         q.add_param(keys.RTQOS, keys.CONTROL)
         q.add_param(keys.PLAYER_BACKEND, keys.MEDIAPLAYER)
         q.add_param(keys.SUPPORTED_CODECS, supported_codecs)
+        if low_latency:
+            q.add_param(keys.LOW_LATENCY, Boolean.TRUE)
         url = '?'.join([q.url, urlencode(q.params)])
         request_dict = {
             'url': url,
@@ -135,7 +137,7 @@ def live_request(channel, platform=keys.WEB, headers={}, supported_codecs='av1,h
 
 
 @query
-def _live(channel, token, headers={}, supported_codecs='av1,h265,h264'):
+def _live(channel, token, headers={}, supported_codecs='av1,h265,h264', low_latency=False):
     signature = token[keys.SIGNATURE]
     access_token = token[keys.VALUE]
 
@@ -153,11 +155,13 @@ def _live(channel, token, headers={}, supported_codecs='av1,h265,h264'):
     q.add_param(keys.RTQOS, keys.CONTROL)
     q.add_param(keys.PLAYER_BACKEND, keys.MEDIAPLAYER)
     q.add_param(keys.SUPPORTED_CODECS, supported_codecs)
+    if low_latency:
+        q.add_param(keys.LOW_LATENCY, Boolean.TRUE)
     return q
 
 
 @m3u8
-def live(channel, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264'):
+def live(channel, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264', low_latency=False):
     token = channel_token(channel, platform=platform, headers=headers)
     token = get_access_token(token)
     if not token:
@@ -165,7 +169,7 @@ def live(channel, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264
     elif isinstance(token, dict) and 'error' in token:
         return token
     else:
-        return _live(channel, token, headers=headers, supported_codecs=supported_codecs)
+        return _live(channel, token, headers=headers, supported_codecs=supported_codecs, low_latency=low_latency)
 
 
 def video_request(video_id, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264'):
