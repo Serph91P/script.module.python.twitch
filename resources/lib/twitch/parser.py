@@ -20,13 +20,19 @@ _m3u_pattern = re.compile(
     r'#EXT-X-MEDIA:TYPE=VIDEO.*'
     r'GROUP-ID="(?P<group_id>[^"]*)",'
     r'NAME="(?P<group_name>[^"]*)"[,=\w]*\n'
-    r'#EXT-X-STREAM-INF:.*'
-    r'BANDWIDTH=(?P<bandwidth>[0-9]+),'
-    r'(?:.*RESOLUTION="*(?P<resolution>[0-9xX]+)"*,)?'
-    r'(?:.*FRAME-RATE=(?P<fps>[0-9.]+))?.*\n'
+    r'#EXT-X-STREAM-INF:(?P<stream_info>[^\n]*)\n'
     r'(?P<url>http.*)')
 
+_m3u_attribute_pattern = re.compile(r'(?P<key>[A-Z-]+)=(?P<value>"[^"]*"|[^,]*)')
+
 _error_pattern = re.compile(r'.*<tr><td><b>error</b></td><td>(?P<message>.+?)</td></tr>.*', re.IGNORECASE)
+
+
+def _find_m3u_attribute(stream_info, key):
+    for match in re.finditer(_m3u_attribute_pattern, stream_info):
+        if match.group('key') == key:
+            return match.group('value').strip('"')
+    return None
 
 
 def _find_frame_rate(group_id, group_name):
@@ -88,8 +94,13 @@ def m3u8_to_dict(string):
         else:
             name = m.group('group_name')
 
-        if m.group('fps'):
-            fps = float(m.group('fps'))
+        stream_info = m.group('stream_info')
+        bandwidth = _find_m3u_attribute(stream_info, 'BANDWIDTH') or 0
+        resolution = _find_m3u_attribute(stream_info, 'RESOLUTION')
+        codecs = _find_m3u_attribute(stream_info, 'CODECS')
+        frame_rate = _find_m3u_attribute(stream_info, 'FRAME-RATE')
+        if frame_rate:
+            fps = float(frame_rate)
         else:
             fps = _find_frame_rate(m.group('group_id'), m.group('group_name'))
 
@@ -97,9 +108,10 @@ def m3u8_to_dict(string):
             'id': m.group('group_id'),
             'name': name,
             'url': m.group('url'),
-            'bandwidth': int(m.group('bandwidth')),
+            'bandwidth': int(bandwidth),
             'fps': fps,
-            'resolution': m.group('resolution')
+            'resolution': resolution,
+            'codecs': codecs
         }
     log.debug('m3u8_to_dict result:\n{0}'.format(d))
     return d
@@ -117,8 +129,13 @@ def m3u8_to_list(string):
         else:
             name = m.group('group_name')
 
-        if m.group('fps'):
-            fps = float(m.group('fps'))
+        stream_info = m.group('stream_info')
+        bandwidth = _find_m3u_attribute(stream_info, 'BANDWIDTH') or 0
+        resolution = _find_m3u_attribute(stream_info, 'RESOLUTION')
+        codecs = _find_m3u_attribute(stream_info, 'CODECS')
+        frame_rate = _find_m3u_attribute(stream_info, 'FRAME-RATE')
+        if frame_rate:
+            fps = float(frame_rate)
         else:
             fps = _find_frame_rate(m.group('group_id'), m.group('group_name'))
 
@@ -126,9 +143,10 @@ def m3u8_to_list(string):
             'id': m.group('group_id'),
             'name': name,
             'url': m.group('url'),
-            'bandwidth': int(m.group('bandwidth')),
+            'bandwidth': int(bandwidth),
             'fps': fps,
-            'resolution': m.group('resolution')
+            'resolution': resolution,
+            'codecs': codecs
         })
 
     log.debug('m3u8_to_list result:\n{0}'.format(l))
