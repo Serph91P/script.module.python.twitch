@@ -66,12 +66,16 @@ def channel_token(channel, platform=keys.WEB, headers={}):
             "platform": platform
         }
     }]
-    q = GQLQuery('', headers=headers, data=data, use_token=True)
+    # use_token=False: Don't inject module-level OAUTH_TOKEN into GQL requests.
+    # The caller provides explicit auth headers. Device Auth tokens (third-party)
+    # cause 401 on the GQL API - anonymous access with just Client-ID works fine.
+    q = GQLQuery('', headers=headers, data=data, use_token=False)
     return q
 
 
 @query
 def vod_token(video_id, platform=keys.WEB, headers={}):
+    # use_token=False: see channel_token() comment above
     data = [{
         "operationName": "PlaybackAccessToken",
         "extensions": {
@@ -89,7 +93,7 @@ def vod_token(video_id, platform=keys.WEB, headers={}):
             "platform": platform
         }
     }]
-    q = GQLQuery('', headers=headers, data=data, use_token=True)
+    q = GQLQuery('', headers=headers, data=data, use_token=False)
     return q
 
 
