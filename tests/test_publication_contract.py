@@ -42,6 +42,13 @@ class ValidationWorkflowContractTests(unittest.TestCase):
             r'(?ms)^\s{2}package:\s*$.*?^\s{4}needs:\s+source-tests\s*$',
         )
 
+    def test_source_tests_cannot_pollute_the_runtime_tree_with_bytecode(self):
+        source_tests = self.text.split('\n  package:', 1)[0]
+        self.assertRegex(
+            source_tests,
+            r"(?m)^\s{6}PYTHONDONTWRITEBYTECODE:\s+'1'\s*$",
+        )
+
     def test_package_caller_is_exactly_pinned_and_configured(self):
         self.assertIn(f'uses: {PACKAGE_WORKFLOW}', self.text)
         self.assertRegex(
