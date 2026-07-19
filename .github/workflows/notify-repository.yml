@@ -1,21 +1,149 @@
 name: Notify Repository
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - '**.md'
-      - '.gitignore'
-      - 'LICENSE'
+  workflow_run:
+    workflows: [Add-on Validations]
+    types: [completed]
+    branches: [develop]
+
+permissions: {}
 
 jobs:
-  notify-repository:
+  resolve:
+    name: Resolve validated package metadata
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'develop' &&
+          github.event.workflow_run.path == '.github/workflows/addon-validations.yml' }}
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      addon_version: ${{ steps.metadata.outputs.addon_version }}
+      asset_name: ${{ steps.metadata.outputs.asset_name }}
+      artifact_sha256: ${{ steps.metadata.outputs.artifact_sha256 }}
+      publication_id: ${{ steps.metadata.outputs.publication_id }}
     steps:
-      - name: Trigger repository update
-        uses: peter-evans/repository-dispatch@v3
+      - name: Check out immutable notifier tooling
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          token: ${{ secrets.REPO_DISPATCH_TOKEN }}
           repository: Serph91P/repository.serph91p
-          event-type: addon-updated
-          client-payload: '{"addon": "script.module.python.twitch", "ref": "${{ github.ref }}", "sha": "${{ github.sha }}"}'
+          ref: 7adff881ab5d0a7fc63f7474a78b2688e2e6eee4
+          path: tooling
+          persist-credentials: false
+
+      - name: Resolve and validate exact package metadata
+        id: metadata
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SOURCE_REPOSITORY: ${{ github.event.workflow_run.repository.full_name }}
+          CANDIDATE_SHA: ${{ github.event.workflow_run.head_sha }}
+          VALIDATION_RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import importlib.util
+          import io
+          import json
+          import os
+          import zipfile
+          from pathlib import Path
+
+          module_path = Path(
+              'tooling/addon-publication/notify_repository.py'
+          )
+          spec = importlib.util.spec_from_file_location(
+              'immutable_notifier', module_path
+          )
+          if spec is None or spec.loader is None:
+              raise SystemExit('Could not load immutable notifier tooling')
+          notifier = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(notifier)
+
+          token = os.environ['GITHUB_TOKEN']
+          source = os.environ['SOURCE_REPOSITORY']
+          run_id = int(os.environ['VALIDATION_RUN_ID'])
+          selected = notifier.find_required_artifacts(
+              lambda url: notifier._api_request(token, url),
+              source,
+              run_id,
+          )
+          raw_evidence = notifier._download_artifact(
+              token,
+              selected[notifier.EVIDENCE_ARTIFACT]['archive_download_url'],
+              notifier.MAX_EVIDENCE_ARCHIVE_BYTES,
+              'evidence',
+          )
+          with zipfile.ZipFile(io.BytesIO(raw_evidence)) as archive:
+              infos = archive.infolist()
+              if (
+                  len(infos) != 1
+                  or infos[0].filename != notifier.EVIDENCE_FILENAME
+                  or infos[0].is_dir()
+                  or infos[0].flag_bits & 0x1
+                  or infos[0].file_size > notifier.MAX_EVIDENCE_JSON_BYTES
+              ):
+                  raise SystemExit('Evidence artifact member is invalid')
+              evidence = json.loads(
+                  archive.read(infos[0]).decode('utf-8'),
+                  object_pairs_hook=notifier._reject_duplicate_json_fields,
+              )
+
+          values = {
+              'source_repository': source,
+              'candidate_sha': os.environ['CANDIDATE_SHA'],
+              'validation_run_id': run_id,
+              'validation_workflow': 'Add-on Validations',
+              'validation_workflow_path': (
+                  '.github/workflows/addon-validations.yml'
+              ),
+              'validation_event': 'push',
+              'expected_branch': 'develop',
+              'addon_id': 'script.module.python.twitch',
+              'addon_version': evidence.get('addon_version'),
+              'asset_name': evidence.get('asset_name'),
+              'artifact_sha256': evidence.get('artifact_sha256'),
+              'publication_id': evidence.get('publication_id'),
+          }
+          notifier.validate_inputs(values, source)
+          notifier.read_and_validate_evidence_archive(raw_evidence, values)
+          notifier.prepare_dispatch(values, source, token)
+
+          with Path(os.environ['GITHUB_OUTPUT']).open(
+              'a', encoding='ascii'
+          ) as output:
+              for name in (
+                  'addon_version',
+                  'asset_name',
+                  'artifact_sha256',
+                  'publication_id',
+              ):
+                  output.write(f'{name}={values[name]}\n')
+          PY
+
+  notify-repository:
+    needs: resolve
+    if: ${{ needs.resolve.result == 'success' }}
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    uses: Serph91P/repository.serph91p/.github/workflows/reusable-notify-repository.yml@7adff881ab5d0a7fc63f7474a78b2688e2e6eee4
+    with:
+      source_repository: ${{ github.event.workflow_run.repository.full_name }}
+      candidate_sha: ${{ github.event.workflow_run.head_sha }}
+      validation_run_id: ${{ github.event.workflow_run.id }}
+      validation_workflow: Add-on Validations
+      validation_workflow_path: .github/workflows/addon-validations.yml
+      validation_event: push
+      expected_branch: develop
+      addon_id: script.module.python.twitch
+      addon_version: ${{ needs.resolve.outputs.addon_version }}
+      asset_name: ${{ needs.resolve.outputs.asset_name }}
+      artifact_sha256: ${{ needs.resolve.outputs.artifact_sha256 }}
+      publication_id: ${{ needs.resolve.outputs.publication_id }}
+    secrets:
+      REPO_DISPATCH_TOKEN: ${{ secrets.REPO_DISPATCH_TOKEN }}
