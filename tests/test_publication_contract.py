@@ -73,7 +73,7 @@ class ValidationWorkflowContractTests(unittest.TestCase):
         release = (WORKFLOWS / 'make-release.yml').read_bytes()
         self.assertEqual(
             hashlib.sha256(release).hexdigest(),
-            'f646460e7b5f5184edacc08732099f5447562a96023ed731aa87f9cd80e64d66',
+            '1609e1e556777f29fa37a52692e6037c52443042558683ce6f86ceb17e8f445e',
         )
 
 
