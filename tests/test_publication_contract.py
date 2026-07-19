@@ -178,13 +178,16 @@ class NotifierWorkflowContractTests(unittest.TestCase):
         )
         self.assertRegex(self.text, r'(?m)^\s{4}types:\s+\[completed\]\s*$')
         self.assertRegex(self.text, r'(?m)^\s{4}branches:\s+\[develop\]\s*$')
+        job_condition = self.text.split('\n    runs-on:', 1)[0].rsplit(
+            '\n    if: >-', 1)[1]
         for condition in (
                 "github.event.workflow_run.conclusion == 'success'",
                 "github.event.workflow_run.event == 'push'",
                 "github.event.workflow_run.head_branch == 'develop'",
                 "github.event.workflow_run.path == "
-                "'.github/workflows/addon-validations.yml@develop'"):
-            self.assertIn(condition, self.text)
+                "'.github/workflows/addon-validations.yml'"):
+            self.assertIn(condition, job_condition)
+        self.assertNotIn('@develop', job_condition)
 
     def test_notifier_calls_only_the_exact_pinned_reusable_contract(self):
         self.assertIn(f'uses: {NOTIFIER_WORKFLOW}', self.text)
