@@ -13,17 +13,18 @@ from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / '.github' / 'workflows'
-TOOLING_SHA = '7adff881ab5d0a7fc63f7474a78b2688e2e6eee4'
+PACKAGE_TOOLING_SHA = '7adff881ab5d0a7fc63f7474a78b2688e2e6eee4'
+NOTIFIER_TOOLING_SHA = '5afd718564c0d55a914978e43aafd34c92a53029'
 ADDON_ID = 'script.module.python.twitch'
 ADDON_VERSION = '3.0.4'
 RUNTIME_ENTRIES = ['addon.xml', 'changelog.txt', 'resources/']
 PACKAGE_WORKFLOW = (
     'Serph91P/repository.serph91p/.github/workflows/'
-    f'reusable-addon-package.yml@{TOOLING_SHA}'
+    f'reusable-addon-package.yml@{PACKAGE_TOOLING_SHA}'
 )
 NOTIFIER_WORKFLOW = (
     'Serph91P/repository.serph91p/.github/workflows/'
-    f'reusable-notify-repository.yml@{TOOLING_SHA}'
+    f'reusable-notify-repository.yml@{NOTIFIER_TOOLING_SHA}'
 )
 FULL_SHA_USE = re.compile(r'^\s*uses:\s+\S+@[0-9a-f]{40}\s*$', re.MULTILINE)
 
@@ -85,7 +86,7 @@ class ImmutablePackageIntegrationTests(unittest.TestCase):
         helper_path = Path(cls.tooling.name) / 'build_package.py'
         url = (
             'https://raw.githubusercontent.com/Serph91P/repository.serph91p/'
-            f'{TOOLING_SHA}/addon-publication/build_package.py'
+            f'{PACKAGE_TOOLING_SHA}/addon-publication/build_package.py'
         )
         with urllib.request.urlopen(url, timeout=30) as response:
             helper_path.write_bytes(response.read())
@@ -190,6 +191,10 @@ class NotifierWorkflowContractTests(unittest.TestCase):
         self.assertNotIn('@develop', job_condition)
 
     def test_notifier_calls_only_the_exact_pinned_reusable_contract(self):
+        self.assertRegex(
+            self.text,
+            rf'(?m)^\s{{10}}ref:\s+{NOTIFIER_TOOLING_SHA}\s*$',
+        )
         self.assertIn(f'uses: {NOTIFIER_WORKFLOW}', self.text)
         expected = {
             'source_repository':
@@ -245,7 +250,7 @@ class PinnedNotifierIntegrationTests(unittest.TestCase):
         helper_path = Path(cls.tooling.name) / 'notify_repository.py'
         url = (
             'https://raw.githubusercontent.com/Serph91P/repository.serph91p/'
-            f'{TOOLING_SHA}/addon-publication/notify_repository.py'
+            f'{NOTIFIER_TOOLING_SHA}/addon-publication/notify_repository.py'
         )
         with urllib.request.urlopen(url, timeout=30) as response:
             helper_path.write_bytes(response.read())
