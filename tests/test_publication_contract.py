@@ -14,7 +14,7 @@ from xml.etree import ElementTree
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / '.github' / 'workflows'
 PACKAGE_TOOLING_SHA = '7adff881ab5d0a7fc63f7474a78b2688e2e6eee4'
-NOTIFIER_TOOLING_SHA = 'a1730e889acf1816fd6d8c856c10b9ce97747829'
+NOTIFIER_TOOLING_SHA = 'c4c17149a2e8da28b59461b75bd1737bd31eb6e7'
 ADDON_ID = 'script.module.python.twitch'
 ADDON_VERSION = '3.0.4'
 RUNTIME_ENTRIES = ['addon.xml', 'changelog.txt', 'resources/']
@@ -261,6 +261,20 @@ class PinnedNotifierIntegrationTests(unittest.TestCase):
         cls.notifier = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.notifier)
 
+        builder_path = Path(cls.tooling.name) / 'build_repository.py'
+        url = (
+            'https://raw.githubusercontent.com/Serph91P/repository.serph91p/'
+            f'{NOTIFIER_TOOLING_SHA}/scripts/build_repository.py'
+        )
+        with urllib.request.urlopen(url, timeout=30) as response:
+            builder_path.write_bytes(response.read())
+        spec = importlib.util.spec_from_file_location(
+            'pinned_target_repository_builder', builder_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError('Unable to load pinned target repository builder')
+        cls.builder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.builder)
+
     @classmethod
     def inputs(cls, **overrides):
         values = {
@@ -391,6 +405,64 @@ class PinnedNotifierIntegrationTests(unittest.TestCase):
                 'token', 'credential', 'asset_name', 'artifact_sha256',
                 'archive_download_url', 'signed_url'):
             self.assertNotIn(forbidden, rendered)
+
+    def test_notifier_and_target_builder_share_retention_boundaries(self):
+        source_config = {
+            'package_artifact_name': 'addon-package',
+            'evidence_artifact_name': 'validation-evidence',
+        }
+        original_api_get = self.builder.source_github_api_get
+        self.addCleanup(setattr, self.builder, 'source_github_api_get',
+                        original_api_get)
+
+        for lifetime, accepted in (
+                (2591997, False),
+                (2591998, True),
+                (2591999, True),
+                (2592000, True),
+                (2592001, False)):
+            expires_at = (
+                datetime.datetime(2026, 7, 1, 12, 0,
+                                  tzinfo=datetime.timezone.utc)
+                + datetime.timedelta(seconds=lifetime)
+            ).strftime('%Y-%m-%dT%H:%M:%SZ')
+            artifacts = [
+                self.artifact('validation-evidence', 1,
+                              expires_at=expires_at),
+                self.artifact('addon-package', 2, expires_at=expires_at),
+            ]
+            self.builder.source_github_api_get = lambda _url: {
+                'total_count': 2,
+                'artifacts': artifacts,
+            }
+
+            with self.subTest(tool='notifier', lifetime=lifetime):
+                call = lambda: self.notifier.find_required_artifacts(
+                    lambda _url: ({'artifacts': artifacts}, {}),
+                    self.SOURCE,
+                    self.RUN_ID,
+                    now=self.NOW,
+                )
+                if accepted:
+                    self.assertEqual(set(call()),
+                                     {'addon-package', 'validation-evidence'})
+                else:
+                    with self.assertRaises(self.notifier.NotificationError):
+                        call()
+
+            with self.subTest(tool='builder', lifetime=lifetime):
+                call = lambda: self.builder.fetch_validated_run_artifacts(
+                    self.SOURCE,
+                    self.RUN_ID,
+                    source_config,
+                    now=self.NOW,
+                )
+                if accepted:
+                    self.assertEqual(set(call()),
+                                     {'addon-package', 'validation-evidence'})
+                else:
+                    with self.assertRaises(RuntimeError):
+                        call()
 
 
 if __name__ == '__main__':
