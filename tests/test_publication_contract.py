@@ -13,17 +13,18 @@ from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / '.github' / 'workflows'
-TOOLING_SHA = '7adff881ab5d0a7fc63f7474a78b2688e2e6eee4'
+PACKAGE_TOOLING_SHA = '7adff881ab5d0a7fc63f7474a78b2688e2e6eee4'
+NOTIFIER_TOOLING_SHA = 'c4c17149a2e8da28b59461b75bd1737bd31eb6e7'
 ADDON_ID = 'script.module.python.twitch'
 ADDON_VERSION = '3.0.4'
 RUNTIME_ENTRIES = ['addon.xml', 'changelog.txt', 'resources/']
 PACKAGE_WORKFLOW = (
     'Serph91P/repository.serph91p/.github/workflows/'
-    f'reusable-addon-package.yml@{TOOLING_SHA}'
+    f'reusable-addon-package.yml@{PACKAGE_TOOLING_SHA}'
 )
 NOTIFIER_WORKFLOW = (
     'Serph91P/repository.serph91p/.github/workflows/'
-    f'reusable-notify-repository.yml@{TOOLING_SHA}'
+    f'reusable-notify-repository.yml@{NOTIFIER_TOOLING_SHA}'
 )
 FULL_SHA_USE = re.compile(r'^\s*uses:\s+\S+@[0-9a-f]{40}\s*$', re.MULTILINE)
 
@@ -73,7 +74,7 @@ class ValidationWorkflowContractTests(unittest.TestCase):
         release = (WORKFLOWS / 'make-release.yml').read_bytes()
         self.assertEqual(
             hashlib.sha256(release).hexdigest(),
-            'f646460e7b5f5184edacc08732099f5447562a96023ed731aa87f9cd80e64d66',
+            '1609e1e556777f29fa37a52692e6037c52443042558683ce6f86ceb17e8f445e',
         )
 
 
@@ -85,7 +86,7 @@ class ImmutablePackageIntegrationTests(unittest.TestCase):
         helper_path = Path(cls.tooling.name) / 'build_package.py'
         url = (
             'https://raw.githubusercontent.com/Serph91P/repository.serph91p/'
-            f'{TOOLING_SHA}/addon-publication/build_package.py'
+            f'{PACKAGE_TOOLING_SHA}/addon-publication/build_package.py'
         )
         with urllib.request.urlopen(url, timeout=30) as response:
             helper_path.write_bytes(response.read())
@@ -190,6 +191,10 @@ class NotifierWorkflowContractTests(unittest.TestCase):
         self.assertNotIn('@develop', job_condition)
 
     def test_notifier_calls_only_the_exact_pinned_reusable_contract(self):
+        self.assertRegex(
+            self.text,
+            rf'(?m)^\s{{10}}ref:\s+{NOTIFIER_TOOLING_SHA}\s*$',
+        )
         self.assertIn(f'uses: {NOTIFIER_WORKFLOW}', self.text)
         expected = {
             'source_repository':
@@ -245,7 +250,7 @@ class PinnedNotifierIntegrationTests(unittest.TestCase):
         helper_path = Path(cls.tooling.name) / 'notify_repository.py'
         url = (
             'https://raw.githubusercontent.com/Serph91P/repository.serph91p/'
-            f'{TOOLING_SHA}/addon-publication/notify_repository.py'
+            f'{NOTIFIER_TOOLING_SHA}/addon-publication/notify_repository.py'
         )
         with urllib.request.urlopen(url, timeout=30) as response:
             helper_path.write_bytes(response.read())
@@ -255,6 +260,20 @@ class PinnedNotifierIntegrationTests(unittest.TestCase):
             raise RuntimeError('Unable to load pinned repository notifier')
         cls.notifier = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.notifier)
+
+        builder_path = Path(cls.tooling.name) / 'build_repository.py'
+        url = (
+            'https://raw.githubusercontent.com/Serph91P/repository.serph91p/'
+            f'{NOTIFIER_TOOLING_SHA}/scripts/build_repository.py'
+        )
+        with urllib.request.urlopen(url, timeout=30) as response:
+            builder_path.write_bytes(response.read())
+        spec = importlib.util.spec_from_file_location(
+            'pinned_target_repository_builder', builder_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError('Unable to load pinned target repository builder')
+        cls.builder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.builder)
 
     @classmethod
     def inputs(cls, **overrides):
@@ -386,6 +405,64 @@ class PinnedNotifierIntegrationTests(unittest.TestCase):
                 'token', 'credential', 'asset_name', 'artifact_sha256',
                 'archive_download_url', 'signed_url'):
             self.assertNotIn(forbidden, rendered)
+
+    def test_notifier_and_target_builder_share_retention_boundaries(self):
+        source_config = {
+            'package_artifact_name': 'addon-package',
+            'evidence_artifact_name': 'validation-evidence',
+        }
+        original_api_get = self.builder.source_github_api_get
+        self.addCleanup(setattr, self.builder, 'source_github_api_get',
+                        original_api_get)
+
+        for lifetime, accepted in (
+                (2591997, False),
+                (2591998, True),
+                (2591999, True),
+                (2592000, True),
+                (2592001, False)):
+            expires_at = (
+                datetime.datetime(2026, 7, 1, 12, 0,
+                                  tzinfo=datetime.timezone.utc)
+                + datetime.timedelta(seconds=lifetime)
+            ).strftime('%Y-%m-%dT%H:%M:%SZ')
+            artifacts = [
+                self.artifact('validation-evidence', 1,
+                              expires_at=expires_at),
+                self.artifact('addon-package', 2, expires_at=expires_at),
+            ]
+            self.builder.source_github_api_get = lambda _url: {
+                'total_count': 2,
+                'artifacts': artifacts,
+            }
+
+            with self.subTest(tool='notifier', lifetime=lifetime):
+                call = lambda: self.notifier.find_required_artifacts(
+                    lambda _url: ({'artifacts': artifacts}, {}),
+                    self.SOURCE,
+                    self.RUN_ID,
+                    now=self.NOW,
+                )
+                if accepted:
+                    self.assertEqual(set(call()),
+                                     {'addon-package', 'validation-evidence'})
+                else:
+                    with self.assertRaises(self.notifier.NotificationError):
+                        call()
+
+            with self.subTest(tool='builder', lifetime=lifetime):
+                call = lambda: self.builder.fetch_validated_run_artifacts(
+                    self.SOURCE,
+                    self.RUN_ID,
+                    source_config,
+                    now=self.NOW,
+                )
+                if accepted:
+                    self.assertEqual(set(call()),
+                                     {'addon-package', 'validation-evidence'})
+                else:
+                    with self.assertRaises(RuntimeError):
+                        call()
 
 
 if __name__ == '__main__':
