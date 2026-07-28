@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: Serph91P/repository.serph91p
-          ref: 7adff881ab5d0a7fc63f7474a78b2688e2e6eee4
+          ref: c4c17149a2e8da28b59461b75bd1737bd31eb6e7
           path: tooling
           persist-credentials: false
 
@@ -131,7 +131,7 @@ jobs:
       actions: read
       contents: read
       id-token: write
-    uses: Serph91P/repository.serph91p/.github/workflows/reusable-notify-repository.yml@7adff881ab5d0a7fc63f7474a78b2688e2e6eee4
+    uses: Serph91P/repository.serph91p/.github/workflows/reusable-notify-repository.yml@c4c17149a2e8da28b59461b75bd1737bd31eb6e7
     with:
       source_repository: ${{ github.event.workflow_run.repository.full_name }}
       candidate_sha: ${{ github.event.workflow_run.head_sha }}
