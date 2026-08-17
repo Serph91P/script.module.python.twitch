@@ -16,7 +16,7 @@ WORKFLOWS = ROOT / '.github' / 'workflows'
 PACKAGE_TOOLING_SHA = '7adff881ab5d0a7fc63f7474a78b2688e2e6eee4'
 NOTIFIER_TOOLING_SHA = 'c4c17149a2e8da28b59461b75bd1737bd31eb6e7'
 ADDON_ID = 'script.module.python.twitch'
-ADDON_VERSION = '3.0.4'
+ADDON_VERSION = '3.0.5'
 RUNTIME_ENTRIES = ['addon.xml', 'changelog.txt', 'resources/']
 PACKAGE_WORKFLOW = (
     'Serph91P/repository.serph91p/.github/workflows/'
