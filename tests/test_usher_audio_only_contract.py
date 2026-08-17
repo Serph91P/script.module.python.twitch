@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'resources' / 'lib'))
+sys.modules.setdefault('requests', mock.Mock())
 
 from twitch import keys, queries  # noqa: E402
 from twitch.api import usher  # noqa: E402
