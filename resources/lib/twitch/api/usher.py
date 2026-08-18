@@ -104,7 +104,8 @@ def _legacy_video(video_id):
     return q
 
 
-def live_request(channel, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264', low_latency=False):
+def live_request(channel, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264', low_latency=False,
+                 allow_audio_only=True):
     token = channel_token(channel, platform=platform, headers=headers)
     token = get_access_token(token)
 
@@ -121,7 +122,7 @@ def live_request(channel, platform=keys.WEB, headers={}, supported_codecs='av1,h
         q.add_param(keys.TOKEN, access_token.encode('utf-8'))
         q.add_param(keys.ALLOW_SOURCE, Boolean.TRUE)
         q.add_param(keys.ALLOW_SPECTRE, Boolean.TRUE)
-        q.add_param(keys.ALLOW_AUDIO_ONLY, Boolean.TRUE)
+        q.add_param(keys.ALLOW_AUDIO_ONLY, Boolean.TRUE if allow_audio_only else Boolean.FALSE)
         q.add_param(keys.FAST_BREAD, Boolean.TRUE)
         q.add_param(keys.CDM, keys.WV)
         q.add_param(keys.REASSIGNMENT_SUPPORTED, Boolean.TRUE)
@@ -141,7 +142,7 @@ def live_request(channel, platform=keys.WEB, headers={}, supported_codecs='av1,h
 
 
 @query
-def _live(channel, token, headers={}, supported_codecs='av1,h265,h264', low_latency=False):
+def _live(channel, token, headers, supported_codecs, low_latency, allow_audio_only):
     signature = token[keys.SIGNATURE]
     access_token = token[keys.VALUE]
 
@@ -151,7 +152,7 @@ def _live(channel, token, headers={}, supported_codecs='av1,h265,h264', low_late
     q.add_param(keys.TOKEN, access_token.encode('utf-8'))
     q.add_param(keys.ALLOW_SOURCE, Boolean.TRUE)
     q.add_param(keys.ALLOW_SPECTRE, Boolean.TRUE)
-    q.add_param(keys.ALLOW_AUDIO_ONLY, Boolean.TRUE)
+    q.add_param(keys.ALLOW_AUDIO_ONLY, Boolean.TRUE if allow_audio_only else Boolean.FALSE)
     q.add_param(keys.FAST_BREAD, Boolean.TRUE)
     q.add_param(keys.CDM, keys.WV)
     q.add_param(keys.REASSIGNMENT_SUPPORTED, Boolean.TRUE)
@@ -165,7 +166,8 @@ def _live(channel, token, headers={}, supported_codecs='av1,h265,h264', low_late
 
 
 @m3u8
-def live(channel, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264', low_latency=False):
+def live(channel, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264', low_latency=False,
+         allow_audio_only=True):
     token = channel_token(channel, platform=platform, headers=headers)
     token = get_access_token(token)
     if not token:
@@ -173,10 +175,11 @@ def live(channel, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264
     elif isinstance(token, dict) and 'error' in token:
         return token
     else:
-        return _live(channel, token, headers=headers, supported_codecs=supported_codecs, low_latency=low_latency)
+        return _live(channel, token, headers, supported_codecs, low_latency, allow_audio_only)
 
 
-def video_request(video_id, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264'):
+def video_request(video_id, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264',
+                  allow_audio_only=True):
     video_id = valid_video_id(video_id)
     if video_id:
         token = vod_token(video_id, platform=platform, headers=headers)
@@ -194,7 +197,7 @@ def video_request(video_id, platform=keys.WEB, headers={}, supported_codecs='av1
             q.add_param(keys.NAUTHSIG, signature.encode('utf-8'))
             q.add_param(keys.NAUTH, access_token.encode('utf-8'))
             q.add_param(keys.ALLOW_SOURCE, Boolean.TRUE)
-            q.add_param(keys.ALLOW_AUDIO_ONLY, Boolean.TRUE)
+            q.add_param(keys.ALLOW_AUDIO_ONLY, Boolean.TRUE if allow_audio_only else Boolean.FALSE)
             q.add_param(keys.CDM, keys.WV)
             q.add_param(keys.REASSIGNMENT_SUPPORTED, Boolean.TRUE)
             q.add_param(keys.PLAYLIST_INCLUDE_FRAMERATE, Boolean.TRUE)
@@ -216,7 +219,7 @@ def video_request(video_id, platform=keys.WEB, headers={}, supported_codecs='av1
 
 
 @query
-def _vod(video_id, token, headers={}, supported_codecs='av1,h265,h264'):
+def _vod(video_id, token, headers, supported_codecs, allow_audio_only):
     signature = token[keys.SIGNATURE]
     access_token = token[keys.VALUE]
 
@@ -225,7 +228,7 @@ def _vod(video_id, token, headers={}, supported_codecs='av1,h265,h264'):
     q.add_param(keys.NAUTHSIG, signature.encode('utf-8'))
     q.add_param(keys.NAUTH, access_token.encode('utf-8'))
     q.add_param(keys.ALLOW_SOURCE, Boolean.TRUE)
-    q.add_param(keys.ALLOW_AUDIO_ONLY, Boolean.TRUE)
+    q.add_param(keys.ALLOW_AUDIO_ONLY, Boolean.TRUE if allow_audio_only else Boolean.FALSE)
     q.add_param(keys.CDM, keys.WV)
     q.add_param(keys.REASSIGNMENT_SUPPORTED, Boolean.TRUE)
     q.add_param(keys.PLAYLIST_INCLUDE_FRAMERATE, Boolean.TRUE)
@@ -239,7 +242,8 @@ def _vod(video_id, token, headers={}, supported_codecs='av1,h265,h264'):
 
 
 @m3u8
-def video(video_id, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264'):
+def video(video_id, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h264',
+          allow_audio_only=True):
     video_id = valid_video_id(video_id)
     if video_id:
         token = vod_token(video_id, platform=platform, headers=headers)
@@ -250,7 +254,7 @@ def video(video_id, platform=keys.WEB, headers={}, supported_codecs='av1,h265,h2
         elif isinstance(token, dict) and 'error' in token:
             return token
         else:
-            return _vod(video_id, token, headers=headers, supported_codecs=supported_codecs)
+            return _vod(video_id, token, headers, supported_codecs, allow_audio_only)
     else:
         raise NotImplementedError('Unknown Video Type')
 
